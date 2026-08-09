@@ -1,0 +1,40 @@
+name: HypixelMore
+version: 1.0.0
+main: com.tuan.more.HypixelMorePlugin
+api-version: "1.21.4"
+author: Tuan
+description: Bulk minigames - Arcade, Blitz, Smash Heroes, TNT Games, Turbo Kart, UHC, VampireZ, Warlords, Arena Brawl, Paintball, Quakecraft
+commands:
+  arcade:
+    description: Arcade
+    usage: /arcade <join|leave|start>
+  blitz:
+    description: Blitz
+    usage: /blitz <join|leave|start>
+  smash:
+    description: Smash Heroes
+    usage: /smash <join|leave|start>
+  tnt:
+    description: TNT Games
+    usage: /tnt <join|leave|start>
+  kart:
+    description: Turbo Kart Racers
+    usage: /kart <join|leave|start>
+  uhc:
+    description: UHC
+    usage: /uhc <join|leave|start>
+  vampirez:
+    description: VampireZ
+    usage: /vampirez <join|leave|start>
+  warlords:
+    description: Warlords
+    usage: /warlords <join|leave|start>
+  arenabrawl:
+    description: Arena Brawl
+    usage: /arenabrawl <join|leave|start>
+  paintball:
+    description: Paintball
+    usage: /paintball <join|leave|start>
+  quake:
+    description: Quakecraft
+    usage: /quake <join|leave|start>

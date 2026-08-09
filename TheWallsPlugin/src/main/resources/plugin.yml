@@ -1,0 +1,10 @@
+name: TheWallsPlugin
+version: 1.0.0
+main: com.tuan.walls.TheWallsPlugin
+api-version: "1.21.4"
+author: Tuan
+description: The Walls minigame for Hypixel Clone
+commands:
+  walls:
+    description: The Walls
+    usage: /walls <join|leave|start>

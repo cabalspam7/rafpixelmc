@@ -1,0 +1,10 @@
+name: DuelsPlugin
+version: 1.0.0
+main: com.tuan.duels.DuelsPlugin
+api-version: "1.21.4"
+author: Tuan
+description: Custom 1v1 Duels for Hypixel Clone
+commands:
+  duels:
+    description: 1v1 duels
+    usage: /duels <join|leave>

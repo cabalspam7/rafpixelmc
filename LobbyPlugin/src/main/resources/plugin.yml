@@ -1,0 +1,14 @@
+name: LobbyPlugin
+version: 1.0.0
+main: com.tuan.lobby.LobbyPlugin
+api-version: "1.21.4"
+author: Tuan
+description: Lobby hub, game NPCs, scoreboard, hub portal for Hypixel Clone
+depend: [CoinsPlugin]
+commands:
+  lobby:
+    description: Return to lobby
+    usage: /lobby
+  play:
+    description: Join a game by name
+    usage: /play <game>

@@ -1,0 +1,10 @@
+name: MurderMysteryPlugin
+version: 1.0.0
+main: com.tuan.murder.MurderMysteryPlugin
+api-version: "1.21.4"
+author: Tuan
+description: Murder Mystery minigame for Hypixel Clone
+commands:
+  mm:
+    description: Murder Mystery
+    usage: /mm <join|leave|start>

@@ -1,0 +1,10 @@
+name: SkyWarsPlugin
+version: 1.0.0
+main: com.tuan.skywars.SkyWarsPlugin
+api-version: "1.21.4"
+author: Tuan
+description: Custom SkyWars solo for Hypixel Clone
+commands:
+  skywars:
+    description: SkyWars solo
+    usage: /skywars <join|leave|start>

@@ -1,0 +1,13 @@
+name: SocialPlugin
+version: 1.0.0
+main: com.tuan.social.SocialPlugin
+api-version: "1.21.4"
+author: Tuan
+description: Friends + Parties for Hypixel Clone
+commands:
+  friend:
+    description: Manage friends
+    usage: /friend <add|accept|remove|list|tp>
+  party:
+    description: Manage party
+    usage: /party <invite|accept|leave|list|warp|disband>

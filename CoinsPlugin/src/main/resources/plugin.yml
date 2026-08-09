@@ -1,0 +1,10 @@
+name: CoinsPlugin
+version: 1.0.0
+main: com.tuan.coins.CoinsPlugin
+api-version: "1.21.4"
+author: Tuan
+description: Global coins currency for Hypixel Clone
+commands:
+  coins:
+    description: Check/leaderboard/give coins
+    usage: /coins [top|give <player> <amt>]

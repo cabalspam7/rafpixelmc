@@ -1,0 +1,10 @@
+name: GuildPlugin
+version: 1.0.0
+main: com.tuan.guild.GuildPlugin
+api-version: "1.21.4"
+author: Tuan
+description: Guilds for Hypixel Clone
+commands:
+  guild:
+    description: Manage guild
+    usage: /guild <create|invite|accept|leave|info|list|disband>

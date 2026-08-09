@@ -1,0 +1,10 @@
+name: MegaWallsPlugin
+version: 1.0.0
+main: com.tuan.megawalls.MegaWallsPlugin
+api-version: "1.21.4"
+author: Tuan
+description: Mega Walls minigame for Hypixel Clone
+commands:
+  mw:
+    description: Mega Walls
+    usage: /mw <join|leave|start|class>
