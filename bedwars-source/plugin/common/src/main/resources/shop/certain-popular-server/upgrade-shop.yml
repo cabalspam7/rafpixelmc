@@ -1,0 +1,139 @@
+#
+# Copyright (C) 2025 ScreamingSandals
+#
+# This file is part of Screaming BedWars.
+#
+# Screaming BedWars is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Screaming BedWars is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with Screaming BedWars. If not, see <https://www.gnu.org/licenses/>.
+#
+
+data:
+  - stack: "IRON_CHESTPLATE;1;Protection;Click here to get more resistance to damage!"
+    column: 2
+    price: 4 of diamond
+    properties:
+      name: upgrade
+      entities:
+        - type: team
+          upgrade-name: protection
+
+  - stack: "IRON_SWORD;1;Sharpness;Kill players quicker!."
+    column: 1
+    price: 4 of diamond
+    properties:
+      name: upgrade
+      entities:
+        - type: team
+          upgrade-name: sharpness
+
+  - stack: "GOLDEN_PICKAXE;1;Efficiency;Break Blocks quicker!."
+    price: 4 of diamond
+    column: 3
+    properties:
+      name: upgrade
+      entities:
+        - type: team
+          upgrade-name: efficiency
+
+  - price: 4 of iron
+    properties:
+      name: upgrade
+      entities:
+        - type: spawner
+          add-levels: 0.2
+          max-level: 2
+          spawner-type:
+            - iron
+            - gold
+          auto-discover-spawners-if-not-linked: true
+    stack:
+      type: FURNACE
+      amount: 1
+      display-name: "Forge Upgrade"
+
+  - stack: "BEACON;1;§bHeal Pool;§7Triggers a pool around the base that heals you!"
+    column: 5
+    row: 1
+    properties:
+      name: upgrade
+      entities:
+        - type: team
+          upgrade-name: healpool
+    price: 8 of diamond
+
+  - stack: "LEATHER;1;TRAPS;TRAP YOUR ENEMY"
+    column: 7
+    items:
+      - price: 2 of diamond
+        skip: 1
+        properties:
+          name: upgrade
+          entities:
+            - type: team
+              upgrade-name: blindtrap
+        stack:
+          type: STRING
+          display-name: "§bBlindess trap"
+          lore:
+            - "§7Get informed when an enemy enters a 7 block radius of your base"
+            - "§7Blind the foe and gain an upper advantage!"
+
+      - price: 2 of diamond
+        skip: 1
+        properties:
+          name: upgrade
+          entities:
+            - type: team
+              upgrade-name: minertrap
+        stack:
+          type: STRING
+          display-name: "§bMining Fatigue trap"
+          lore:
+            - "§7Get informed when an enemy enters a 7 block radius of your base"
+            - "§7Slow Down their mining and gain an advantage!"
+
+  - stack: "GRAY_STAINED_GLASS_PANE;1;*****"
+    row: 2
+    column: 0
+
+  - stack: "GRAY_STAINED_GLASS_PANE;1;*****"
+    row: 2
+    column: 1
+
+  - stack: "GRAY_STAINED_GLASS_PANE;1;*****"
+    row: 2
+    column: 2
+
+  - stack: "GRAY_STAINED_GLASS_PANE;1;*****"
+    row: 2
+    column: 3
+
+  - stack: "GRAY_STAINED_GLASS_PANE;1;*****"
+    row: 2
+    column: 4
+
+  - stack: "GRAY_STAINED_GLASS_PANE;1;*****"
+    row: 2
+    column: 5
+
+  - stack: "GRAY_STAINED_GLASS_PANE;1;*****"
+    row: 2
+    column: 6
+
+  - stack: "GRAY_STAINED_GLASS_PANE;1;*****"
+    row: 2
+    column: 7
+
+  - stack: "GRAY_STAINED_GLASS_PANE;1;*****"
+    row: 2
+    column: 8

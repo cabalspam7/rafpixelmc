@@ -1,0 +1,211 @@
+#
+# Copyright (C) 2025 ScreamingSandals
+#
+# This file is part of Screaming BedWars.
+#
+# Screaming BedWars is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Screaming BedWars is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with Screaming BedWars. If not, see <https://www.gnu.org/licenses/>.
+#
+
+# NOTE: This file is currently WIP, if you want newer revision, please delete this file and reload bw plugin, new file will be created
+name: certain-popular-server
+
+config:
+  use-certain-popular-server-like-holograms-for-spawners: true
+  join-random-team-after-lobby: true
+  default-shop-file: certain-popular-server/shop.yml
+  team-join-item-enabled: false
+  add-wool-to-inventory-on-join: false
+  use-team-letter-prefixes-before-player-names: true
+  use-certain-popular-server-titles: true
+  show-game-info-on-start: true
+  bossbar:
+    game:
+      enabled: false
+    lobby:
+      enabled: true
+      division: NO_DIVISION
+      color: PINK
+  sidebar:
+    date-format: "MM/dd/yy"
+    game:
+      enabled: true
+      legacy-sidebar: false
+      title: "<yellow><bold>BED WARS" # TODO: animated
+      team-prefixes:
+        target-block-lost: <red>✘
+        anchor-empty: <yellow>✘
+        target-block-exists: <green>✔
+        team-count: <green><count>
+      team-line: "<team-color-letter> <team>: <team-status><you>"
+      content:
+        - "<gray><date>"
+        - ""
+        - "<tier>"
+        - ""
+        - "<team-status>"
+        - "<additional-content>"
+        - ""
+        - "<yellow>www.screamingsandals.org"
+      additional-content:
+        show-if-team-count: "<= 4"
+        content:
+          - ""
+          - "<white>Kills: <green><kills>"
+          - "<white>Bed Broken: <green><target-blocks-destroyed>"
+    lobby:
+      enabled: true
+      title: "<yellow><bold>BED WARS" # TODO: animated
+      content:
+        - "<gray><date>"
+        - ""
+        - "<white>Map: <green><game>"
+        - "<white>Players: <green><players>/<max-players>"
+        - ""
+        - "<state>"
+        - ""
+        - "<white>Mode: <green><mode>"
+        - "<white>Version: SBW <gray><version>"
+        - ""
+        - "<yellow>www.screamingsandals.org"
+  game-start-items:
+    enabled: true
+    items:
+      - wooden_sword
+      - leather_helmet
+      - leather_chestplate
+      - leather_leggings
+      - leather_boots
+  destroy-placed-blocks-by-explosion:
+    enabled: true
+    blacklist:
+      - glass
+
+
+# TODO: breakable blocks (GRASS, LONG_GRASS, SNOW)
+# TODO: just add every missing configuration
+
+default-spawner-types-included: false
+custom-spawner-types:
+  emerald:
+    spread: 0.1
+    material: emerald
+    translate: resource_emerald
+    interval: 60
+    color: GREEN
+    name: Emerald
+  diamond:
+    spread: 0.1
+    material: diamond
+    translate: resource_diamond
+    interval: 30
+    color: BLUE
+    name: Diamond
+  iron:
+    spread: 0.1
+    material: iron_ingot
+    translate: resource_iron
+    interval: 2 # interval is currently still int btw, default value in SBA: 2.5
+    color: WHITE
+    name: Iron
+  gold:
+    spread: 0.1
+    material: gold_ingot
+    translate: resource_gold
+    interval: 8
+    color: GOLD
+    name: Gold
+
+upgrades:
+  sharpness:
+    type: enchantment
+    enchantment: minecraft:sharpness
+    max-level: 1
+    apply-to:
+      - "#minecraft:swords"
+  knockback:
+    type: enchantment
+    enchantment: minecraft:knockback
+    max-level: 1
+    apply-to:
+      - "#minecraft:swords"
+  efficiency:
+    type: enchantment
+    enchantment: minecraft:efficiency
+    max-level: 2
+    apply-to:
+      - "#minecraft:pickaxes"
+  protection:
+    type: enchantment
+    enchantment: minecraft:protection
+    max-level: 4
+    apply-to:
+      - "#minecraft:head_armor"
+      - "#minecraft:foot_armor"
+      - "#minecraft:chest_armor"
+      - "#minecraft:leg_armor"
+  healpool:
+    type: trap
+    name: Healpool
+    detection-range: 7
+    effects:
+      - effect: minecraft:regeneration
+        duration: 30
+        amplifier: 1
+    enemies: false
+    team: true
+    singular-use: false
+  blindtrap:
+    type: trap
+    name: Blindtrap
+    detection-range: 7
+    effects:
+      - effect: minecraft:regeneration
+        duration: 30
+        amplifier: 1
+    enemies: true
+    team: false
+    singular-use: true
+    message: "@in_game.trap.blind_trap_triggered.message"
+    team-title: "@in_game.trap.blind_trap_triggered.title"
+    team-subtitle: "@in_game.trap.blind_trap_triggered.subtitle"
+    trigger-sound:
+      name: entity.ender_dragon.growl
+      pitch: 1
+      volume: 1
+  minertrap:
+    type: trap
+    name: Minertrap
+    detection-range: 7
+    effects:
+      - effect: minecraft:mining_fatigue
+        duration: 200
+        amplifier: 2
+    enemies: true
+    team: false
+    singular-use: true
+    message: "@in_game.trap.miner_trap_triggered.message"
+    team-title: "@in_game.trap.miner_trap_triggered.title"
+    team-subtitle: "@in_game.trap.miner_trap_triggered.subtitle"
+    trigger-sound:
+      name: entity.ender_dragon.growl
+      pitch: 1
+      volume: 1
+
+prefabs:
+  # Usage: /bw admin <arena> prefab upgrade-shop
+  upgrade-shop:
+    type: command
+    commands:
+      - /bw admin %game% store add
+      - /bw admin %game% store file set certain-popular-server/upgrade-shop.yml

@@ -1,0 +1,19 @@
+# Eclipse
+/bin
+.settings
+.project
+.classpath
+
+# IntelliJ
+.idea/
+*.iml
+
+# Gradle
+/.gradle
+/build
+/*/build/
+/plugin/*/build/
+/plugin/*/test-environment/
+gradle-app.setting
+!gradle-wrapper.jar
+.gradletasknamecache

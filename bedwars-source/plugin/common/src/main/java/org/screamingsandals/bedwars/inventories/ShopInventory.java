@@ -1,0 +1,879 @@
+/*
+ * Copyright (C) 2025 ScreamingSandals
+ *
+ * This file is part of Screaming BedWars.
+ *
+ * Screaming BedWars is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Screaming BedWars is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Screaming BedWars. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+package org.screamingsandals.bedwars.inventories;
+
+import lombok.Data;
+import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.screamingsandals.bedwars.BedWarsPlugin;
+import org.screamingsandals.bedwars.api.PurchaseType;
+import org.screamingsandals.bedwars.api.config.GameConfigurationContainer;
+import org.screamingsandals.bedwars.api.events.OpenShopEvent;
+import org.screamingsandals.bedwars.api.game.ItemSpawner;
+import org.screamingsandals.bedwars.api.game.StoreManager;
+import org.screamingsandals.bedwars.api.player.BWPlayer;
+import org.screamingsandals.bedwars.commands.DumpCommand;
+import org.screamingsandals.bedwars.config.MainConfig;
+import org.screamingsandals.bedwars.events.*;
+import org.screamingsandals.bedwars.api.game.ItemSpawnerType;
+import org.screamingsandals.bedwars.api.upgrades.Upgrade;
+import org.screamingsandals.bedwars.api.upgrades.UpgradeRegistry;
+import org.screamingsandals.bedwars.api.upgrades.UpgradeStorage;
+import org.screamingsandals.bedwars.game.GameImpl;
+import org.screamingsandals.bedwars.game.ItemSpawnerTypeImpl;
+import org.screamingsandals.bedwars.game.TeamImpl;
+import org.screamingsandals.bedwars.lang.LangKeys;
+import org.screamingsandals.bedwars.player.BedWarsPlayer;
+import org.screamingsandals.bedwars.player.PlayerManagerImpl;
+import org.screamingsandals.bedwars.special.listener.PermaItemListener;
+import org.screamingsandals.bedwars.utils.MiscUtils;
+import org.screamingsandals.lib.entity.Entities;
+import org.screamingsandals.lib.event.EventManager;
+import org.screamingsandals.lib.event.OnEvent;
+import org.screamingsandals.lib.lang.Message;
+import org.screamingsandals.lib.item.ItemStack;
+import org.screamingsandals.lib.plugin.ServiceManager;
+import org.screamingsandals.lib.spectator.Component;
+import org.screamingsandals.lib.spectator.sound.SoundSource;
+import org.screamingsandals.lib.spectator.sound.SoundStart;
+import org.screamingsandals.lib.utils.ConfigurateUtils;
+import org.screamingsandals.lib.utils.ResourceLocation;
+import org.screamingsandals.lib.utils.annotations.Service;
+import org.screamingsandals.lib.utils.annotations.ServiceDependencies;
+import org.screamingsandals.lib.utils.annotations.methods.OnPostEnable;
+import org.screamingsandals.lib.utils.annotations.parameters.DataFolder;
+import org.screamingsandals.lib.utils.logger.Logger;
+import org.screamingsandals.simpleinventories.SimpleInventoriesCore;
+import org.screamingsandals.simpleinventories.events.ItemRenderEvent;
+import org.screamingsandals.simpleinventories.events.OnTradeEvent;
+import org.screamingsandals.simpleinventories.events.PreClickEvent;
+import org.screamingsandals.simpleinventories.inventory.Include;
+import org.screamingsandals.simpleinventories.inventory.InventorySet;
+import org.spongepowered.configurate.ConfigurationNode;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.*;
+import java.util.stream.Collectors;
+
+@Service
+@ServiceDependencies(dependsOn = {
+        SimpleInventoriesCore.class
+})
+@RequiredArgsConstructor
+public class ShopInventory implements StoreManager {
+    private final @NotNull Map<@NotNull String, InventorySet> shopMap = new HashMap<>();
+    @DataFolder("shop")
+    private final @NotNull Path shopFolder;
+    private final @NotNull MainConfig mainConfig;
+    private final @NotNull PlayerManagerImpl playerManager;
+    private final @NotNull Logger logger;
+
+    public static @NotNull ShopInventory getInstance() {
+        return ServiceManager.get(ShopInventory.class);
+    }
+
+    @OnPostEnable
+    public void onEnable(@DataFolder @NotNull Path pluginFolder) {
+        try {
+            // Only main shops are currently migrated to the new location!!!
+            if (!Files.exists(shopFolder)) {
+                Files.createDirectory(shopFolder);
+            }
+            if (mainConfig.node("turnOnExperimentalGroovyShop").getBoolean()) {
+                var expectedShopGroovy = shopFolder.resolve("shop.groovy");
+                if (!Files.exists(expectedShopGroovy)) {
+                    var legacyShopGroovy = pluginFolder.resolve("shop.groovy");
+                    if (Files.exists(legacyShopGroovy)) {
+                        Files.move(legacyShopGroovy, shopFolder.resolve("shop.groovy"));
+                    } else {
+                        BedWarsPlugin.getInstance().saveResource("shop/shop.groovy", false);
+                    }
+                }
+            } else {
+                var expectedShopYml = shopFolder.resolve("shop.yml");
+                if (!Files.exists(expectedShopYml)) {
+                    var legacyShopYml = pluginFolder.resolve("shop.yml");
+                    if (Files.exists(legacyShopYml)) {
+                        Files.move(legacyShopYml, shopFolder.resolve("shop.yml"));
+                    } else {
+                        BedWarsPlugin.getInstance().saveResource("shop/shop.yml", false);
+                    }
+                }
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        loadNewShop("default", null);
+    }
+
+    public void show(@NotNull BedWarsPlayer player, OpenShopEvent.@Nullable StoreLike store) {
+        try {
+            String fileName = null;
+            if (store != null) {
+                fileName = store.getShopFile();
+            }
+            if (fileName == null && player.isInGame()) { // who invokes this method for player who is not in game goes directly to hell
+                var defaultShopFile = player.getGame().getConfigurationContainer().getOrDefault(GameConfigurationContainer.DEFAULT_SHOP_FILE, null);
+                if (defaultShopFile != null) {
+                    fileName = defaultShopFile;
+                }
+            }
+            if (fileName != null) {
+                var file = normalizeShopFile(fileName);
+                var name = file.getAbsolutePath();
+                if (!shopMap.containsKey(name)) {
+                    loadNewShop(name, file);
+                }
+                player.openInventory(shopMap.get(name));
+            } else {
+                player.openInventory(shopMap.get("default"));
+            }
+        } catch (Throwable throwable) {
+            player.sendMessage(Component.text("[BW] Your shop.yml/shop.groovy is invalid! Check it out or contact us on Discord."));
+            logger.error("Your shop.yml/shop.groovy is invalid! Check it out or contact us on Discord.", throwable);
+        }
+    }
+
+    public @NotNull File normalizeShopFile(@NotNull String name) {
+        if (name.split("\\.").length > 1) {
+            return shopFolder.resolve(name).toFile();
+        }
+
+        var fileg = shopFolder.resolve(name + ".groovy").toFile();
+        if (fileg.exists()) {
+            return fileg;
+        }
+        return shopFolder.resolve(name + ".yml").toFile();
+    }
+
+    public void onGeneratingItem(@NotNull ItemRenderEvent event) {
+        var itemInfo = event.getItem();
+        var item = itemInfo.getStack();
+        var game = playerManager.getGameOfPlayer(event.getPlayer());
+        var prices = itemInfo.getOriginal().getPrices();
+        if (!prices.isEmpty()) {
+            // TODO: multi-price feature
+            var priceObject = prices.get(0);
+            var price = priceObject.getAmount();
+            var type = game.orElseThrow().getGameVariant().getItemSpawnerType(priceObject.getCurrency());
+            if (type == null) {
+                return;
+            }
+
+            var enabled = itemInfo.getFirstPropertyByName("generateLore")
+                    .map(property -> property.getPropertyData().getBoolean())
+                    .orElseGet(() -> mainConfig.node("lore", "generate-automatically").getBoolean(true));
+
+            if (enabled) {
+                var finalItem = item;
+                var loreText = itemInfo.getFirstPropertyByName("generatedLoreText")
+                        .map(property -> property.getPropertyData().childrenList().stream().map(ConfigurationNode::getString))
+                        .orElseGet(() -> mainConfig.node("lore", "text").childrenList().stream().map(ConfigurationNode::getString))
+                        .filter(Objects::nonNull)
+                        .map(s -> s.replace("%price%", Integer.toString(price))
+                                .replace("%resource%", type.getItemName().asComponent().toLegacy())
+                                .replace("%amount%", Integer.toString(finalItem.getAmount())))
+                        .map(Component::fromLegacy)
+                        .collect(Collectors.toList());
+
+                var nL = new ArrayList<Component>();
+                nL.addAll(item.getLore());
+                nL.addAll(loreText);
+
+                item = item.withItemLore(nL);
+
+                event.setStack(item);
+            }
+        }
+        final var preScanEvent = new PrePropertyScanEventImpl(event);
+        EventManager.fire(preScanEvent);
+        if (preScanEvent.isCancelled()) return;
+
+        var finalItem1 = item;
+        itemInfo.getProperties().forEach(property -> {
+            if (property.hasName()) {
+                var converted = ConfigurateUtils.raw(property.getPropertyData());
+                if (!(converted instanceof Map)) {
+                    converted = DumpCommand.nullValuesAllowingMap("value", converted);
+                }
+
+                //noinspection unchecked
+                var applyEvent = new ApplyPropertyToDisplayedItemEventImpl(game.orElse(null), playerManager.getPlayer(event.getPlayer().getUuid()).orElseThrow(), property.getPropertyName(), (Map<String, Object>) converted, finalItem1);
+                EventManager.fire(applyEvent);
+
+                if (applyEvent.getStack() != null) {
+                    event.setStack(applyEvent.getStack());
+                }
+            }
+        });
+
+        EventManager.fire(new PostPropertyScanEventImpl(event));
+    }
+
+    public void onPreAction(@NotNull PreClickEvent event) {
+        if (event.isCancelled()) {
+            return;
+        }
+
+        var player = event.getPlayer();
+        if (!playerManager.isPlayerInGame(player)) {
+            event.setCancelled(true);
+        }
+
+        if (playerManager.getPlayer(player).orElseThrow().isSpectator()) {
+            event.setCancelled(true);
+        }
+    }
+
+    public void onShopTransaction(@NotNull OnTradeEvent event) {
+        if (event.isCancelled()) {
+            return;
+        }
+
+        if (event.getItem().getFirstPropertyByName("upgrade").isPresent()) {
+            handleUpgrade(event);
+        } else {
+            handleBuy(event);
+        }
+    }
+
+    @OnEvent
+    public void onApplyPropertyToBoughtItem(@NotNull ApplyPropertyToItemEventImpl event) {
+        if (event.getPropertyName().equalsIgnoreCase("applycolorbyteam")
+                || event.getPropertyName().equalsIgnoreCase("transform::applycolorbyteam")) {
+            var player = event.getPlayer();
+            var team = event.getGame().getTeamOfPlayer(player);
+
+            if (mainConfig.node("automatic-coloring-in-shop").getBoolean()) {
+                event.setStack(BedWarsPlugin.getInstance().getColorChanger().applyColor(team.getColor(), event.getStack()));
+            }
+        }
+    }
+
+    @SneakyThrows
+    private void loadDefault(@NotNull InventorySet inventorySet) {
+        inventorySet.getMainSubInventory().dropContents();
+        inventorySet.getMainSubInventory().getWaitingQueue().add(Include.of(Path.of(ShopInventory.class.getResource("/shop/shop.yml").toURI())));
+        inventorySet.getMainSubInventory().process();
+    }
+
+    private void loadNewShop(@NotNull String name, @Nullable File file) {
+        var inventorySet = SimpleInventoriesCore.builder()
+                .genericShop(true)
+                .genericShopPriceTypeRequired(true)
+                .animationsEnabled(true)
+                .allowAccessToConsole(MainConfig.getInstance().node("shop", "allow-execution-of-console-commands").getBoolean())
+                .categoryOptions(localOptionsBuilder ->
+                    localOptionsBuilder
+                            .backItem(mainConfig.readDefinedItem("shopback", "BARRIER"), itemBuilder ->
+                                itemBuilder.name(Message.of(LangKeys.IN_GAME_SHOP_SHOP_BACK).asComponent())
+                            )
+                            .pageBackItem(mainConfig.readDefinedItem("pageback", "ARROW"), itemBuilder ->
+                                itemBuilder.name(Message.of(LangKeys.IN_GAME_SHOP_PAGE_BACK).asComponent())
+                            )
+                            .pageForwardItem(mainConfig.readDefinedItem("pageforward", "BARRIER"), itemBuilder ->
+                                itemBuilder.name(Message.of(LangKeys.IN_GAME_SHOP_PAGE_FORWARD).asComponent())
+                            )
+                            .cosmeticItem(mainConfig.readDefinedItem("shopcosmetic", "AIR"))
+                            .rows(mainConfig.node("shop", "rows").getInt(4))
+                            .renderActualRows(mainConfig.node("shop", "render-actual-rows").getInt(6))
+                            .renderOffset(mainConfig.node("shop", "render-offset").getInt(9))
+                            .renderHeaderStart(mainConfig.node("shop", "render-header-start").getInt(0))
+                            .renderFooterStart(mainConfig.node("shop", "render-footer-start").getInt(45))
+                            .itemsOnRow(mainConfig.node("shop", "items-on-row").getInt(9))
+                            .showPageNumber(mainConfig.node("shop", "show-page-numbers").getBoolean(true))
+                            .inventoryType(mainConfig.node("shop", "inventory-type").getString("CHEST"))
+                            .prefix(Message.of(LangKeys.IN_GAME_SHOP_NAME).asComponent())
+                )
+
+                // old shop format compatibility
+                .variableToProperty("upgrade", "upgrade")
+                .variableToProperty("generate-lore", "generateLore")
+                .variableToProperty("generated-lore-text", "generatedLoreText")
+                .variableToProperty("currency-changer", "currencyChanger")
+                .variableToProperty("disable-shift-buying", "disableShiftBuying")
+
+                .render(this::onGeneratingItem)
+                .preClick(this::onPreAction)
+                .buy(this::onShopTransaction)
+                .define("team", (key, player, playerItemInfo, arguments) -> {
+                    var gPlayer = playerManager.getPlayer(player);
+                    var team = gPlayer.orElseThrow().getGame().getPlayerTeam(gPlayer.orElseThrow());
+                    if (arguments.length > 0) {
+                        String fa = arguments[0];
+                        switch (fa) {
+                            case "color":
+                                return team.getColor().name();
+                            case "chatcolor":
+                                return MiscUtils.toLegacyColorCode(team.getColor().getTextColor());
+                            case "maxplayers":
+                                return Integer.toString(team.getMaxPlayers());
+                            case "players":
+                                return Integer.toString(team.countConnectedPlayers());
+                            case "hasBed":
+                                return Boolean.toString(team.getTarget() != null && team.getTarget().isValid());
+                        }
+                    }
+                    return team.getName();
+                })
+                .define("spawner", (key, player, playerItemInfo, arguments) -> {
+                    var gPlayer = playerManager.getPlayer(player);
+                    GameImpl game = gPlayer.orElseThrow().getGame();
+                    if (arguments.length > 2) {
+                        String upgradeBy = arguments[0];
+                        String upgrade = arguments[1];
+                        UpgradeStorage upgradeStorage = UpgradeRegistry.getUpgrade("spawner");
+                        if (upgradeStorage == null) {
+                            return null;
+                        }
+                        List<Upgrade> upgrades = null;
+                        switch (upgradeBy) {
+                            case "name":
+                                upgrades = upgradeStorage.findItemSpawnerUpgrades(game, upgrade);
+                                break;
+                            case "team":
+                                upgrades = upgradeStorage.findItemSpawnerUpgrades(game, game.getPlayerTeam(gPlayer.get()));
+                                break;
+                        }
+
+                        if (upgrades != null && !upgrades.isEmpty()) {
+                            String what = "level";
+                            if (arguments.length > 3) {
+                                what = arguments[2];
+                            }
+                            double heighest = Double.MIN_VALUE;
+                            switch (what) {
+                                case "level":
+                                    for (Upgrade upgrad : upgrades) {
+                                        if (upgrad.getLevel() > heighest) {
+                                            heighest = upgrad.getLevel();
+                                        }
+                                    }
+                                    return String.valueOf(heighest);
+                                case "initial":
+                                    for (Upgrade upgrad : upgrades) {
+                                        if (upgrad.getInitialLevel() > heighest) {
+                                            heighest = upgrad.getInitialLevel();
+                                        }
+                                    }
+                                    return String.valueOf(heighest);
+                            }
+                        }
+                    }
+                    return "";
+                })
+                .call(categoryBuilder -> {
+                    final var includeEvent = new StoreIncludeEventImpl(name, file == null ? null : file.toPath().toAbsolutePath(), categoryBuilder);
+                    EventManager.fire(includeEvent);
+                    if (includeEvent.isCancelled()) {
+                        return;
+                    }
+
+                    if (file != null) {
+                        categoryBuilder.include(Include.of(file));
+                    } else {
+                        var shopFileName = "shop.yml";
+                        if (mainConfig.node("turnOnExperimentalGroovyShop").getBoolean(false)) {
+                            shopFileName = "shop.groovy";
+                        }
+                        categoryBuilder.include(Include.of(shopFolder.resolve(shopFileName)));
+                    }
+
+                })
+                .getInventorySet();
+
+        try {
+            inventorySet.getMainSubInventory().process();
+        } catch (Exception ex) {
+            logger.warn("Wrong shop.yml/shop.groovy configuration! Check validity of your YAML/Groovy!", ex);
+            loadDefault(inventorySet);
+        }
+
+        shopMap.put(name, inventorySet);
+    }
+
+    private static @NotNull Component getNameOrCustomNameOfItem(@NotNull ItemStack item) {
+        try {
+            if (item.getDisplayName() != null) {
+                return item.getDisplayName();
+            }
+        } catch (Throwable ignored) {
+        }
+
+        var normalItemName = item.getMaterial().location().path().replace("-", " ").replace("_", " ");
+        var sArray = normalItemName.split(" ");
+        var stringBuilder = new StringBuilder();
+
+        for (var s : sArray) {
+            stringBuilder.append(Character.toUpperCase(s.charAt(0))).append(s.substring(1)).append(" ");
+        }
+        return Component.fromLegacy(stringBuilder.toString().trim());
+    }
+
+    private void handleBuy(@NotNull OnTradeEvent event) {
+        var player = event.getPlayer();
+        var game = playerManager.getGameOfPlayer(event.getPlayer()).orElseThrow();
+        var clickType = event.getClickType();
+        var itemInfo = event.getItem();
+
+        // TODO: multi-price feature
+        var price = event.getPrices().get(0);
+        ItemSpawnerTypeImpl type = game.getGameVariant().getItemSpawnerType(price.getCurrency());
+
+        var newItem = event.getStack();
+
+        var amount = newItem.getAmount();
+        var priceAmount = price.getAmount();
+        int inInventory = 0;
+
+        var currencyChanger = itemInfo.getFirstPropertyByName("currencyChanger");
+        if (currencyChanger.isPresent()) {
+            var changeItemToName = currencyChanger.get().getPropertyData().getString();
+            if (changeItemToName == null) {
+                return;
+            }
+
+            var split = changeItemToName.trim().split(" ", 2);
+            if (split.length == 2) {
+                try {
+                    amount = Integer.parseInt(split[0]);
+                    changeItemToName = split[1].trim();
+                    if (changeItemToName.startsWith("of ")) {
+                        changeItemToName = changeItemToName.substring(3).trim();
+                    }
+                } catch (NumberFormatException ignored) {
+                }
+            }
+            var changeItemType = game.getGameVariant().getItemSpawnerType(changeItemToName);
+            if (changeItemType == null) {
+                return;
+            }
+
+            newItem = changeItemType.getItem(amount);
+        }
+
+        var originalMaxStackSize = newItem.getMaterial().maxStackSize();
+        if (
+                !event.isHasAnyExecutions()
+                && clickType.isShiftClick()
+                && originalMaxStackSize > 1
+                && !itemInfo.getFirstPropertyByName("disableShiftBuying").map(v -> v.getPropertyData().getBoolean(false)).orElse(false)
+        ) {
+            double priceOfOne = (double) priceAmount / amount;
+            double maxStackSize;
+            int finalStackSize;
+
+            var it = type.getItem();
+            for (var itemStack : player.getPlayerInventory().getStorageContents()) {
+                if (itemStack != null && itemStack.isSimilar(it)) {
+                    inInventory = inInventory + itemStack.getAmount();
+                }
+            }
+            if (mainConfig.node("sell-max-64-per-click-in-shop").getBoolean()) {
+                maxStackSize = Math.min(inInventory / priceOfOne, originalMaxStackSize);
+            } else {
+                maxStackSize = inInventory / priceOfOne;
+            }
+
+            finalStackSize = (int) maxStackSize;
+            if (finalStackSize > amount) {
+                priceAmount = (int) (priceOfOne * finalStackSize);
+                newItem = newItem.withAmount(finalStackSize);
+                amount = finalStackSize;
+            }
+        }
+
+        var materialItem = type.getItem(priceAmount);
+        if (event.hasPlayerInInventory(materialItem)) {
+            final var prePurchaseEvent = new StorePrePurchaseEventImpl(game, playerManager.getPlayer(event.getPlayer().getUuid()).orElseThrow(), materialItem, newItem, type, PurchaseType.NORMAL_ITEM, event);
+            EventManager.fire(prePurchaseEvent);
+            if (prePurchaseEvent.isCancelled()) {
+                return;
+            }
+            Map<String, Object> permaItemPropertyData = new HashMap<>();
+            for (var property : itemInfo.getProperties()) {
+                var converted = ConfigurateUtils.raw(property.getPropertyData());
+                if (!(converted instanceof Map)) {
+                    converted = DumpCommand.nullValuesAllowingMap("value", converted);
+                }
+                //noinspection unchecked
+                var propertyData = (Map<String, Object>) converted;
+                if (property.hasName()) {
+                    var applyEvent = new ApplyPropertyToBoughtItemEventImpl(game, playerManager.getPlayer(event.getPlayer().getUuid()).orElseThrow(),
+                            property.getPropertyName(), propertyData, newItem);
+                    EventManager.fire(applyEvent);
+
+                    newItem = applyEvent.getStack();
+                }
+                // Checks if the player is buying a permanent item. Setting name to empty string to prevent other listeners from erroring out.
+                else if (propertyData.get(PermaItemListener.getPermItemPropKey()) != null) {
+                    permaItemPropertyData = propertyData;
+                }
+            }
+
+            if (!permaItemPropertyData.isEmpty()) {
+                var applyEvent = new ApplyPropertyToBoughtItemEventImpl(game, playerManager.getPlayer(event.getPlayer().getUuid()).orElseThrow(),
+                        "", permaItemPropertyData, newItem);
+                EventManager.fire(applyEvent);
+            }
+
+            event.sellStack(materialItem);
+            if (event.isHasAnyExecutions()) {
+                event.setRunExecutions(true); // SIv2 will handle that when this is set to true
+            } else {
+                var notFit = event.buyStack(newItem);
+                if (!notFit.isEmpty()) {
+                    notFit.forEach(stack -> Entities.dropItem(stack, player.getLocation()));
+                }
+            }
+
+            if (!mainConfig.node("removePurchaseMessages").getBoolean()) {
+                Message.of(LangKeys.IN_GAME_SHOP_BUY_SUCCESS)
+                        .prefixOrDefault(game.getCustomPrefixComponent())
+                        .placeholder("item", Component.text(amount + "x ").withAppendix(getNameOrCustomNameOfItem(newItem)))
+                        .placeholder("material", Component.text(priceAmount + " ").withAppendix(type.getItemName()))
+                        .send(event.getPlayer());
+            }
+            player.playSound(SoundStart.sound(
+                    ResourceLocation.of(mainConfig.node("sounds", "item_buy", "sound").getString("entity.item.pickup")),
+                    SoundSource.PLAYER,
+                    (float) MainConfig.getInstance().node("sounds", "item_buy", "volume").getDouble(),
+                    (float) MainConfig.getInstance().node("sounds", "item_buy", "pitch").getDouble()
+            ));
+
+            EventManager.fire(new StorePostPurchaseEventImpl(game, playerManager.getPlayer(event.getPlayer().getUuid()).orElseThrow(), PurchaseType.NORMAL_ITEM, event));
+        } else {
+            final var purchaseFailedEvent = new PurchaseFailedEventImpl(game, playerManager.getPlayer(event.getPlayer().getUuid()).orElseThrow(), PurchaseType.NORMAL_ITEM, event);
+            EventManager.fire(purchaseFailedEvent);
+            if (purchaseFailedEvent.isCancelled()) return;
+
+            if (!mainConfig.node("removePurchaseFailedMessages").getBoolean()) {
+                Message.of(LangKeys.IN_GAME_SHOP_BUY_FAILED)
+                        .prefixOrDefault(game.getCustomPrefixComponent())
+                        .placeholder("item", Component.text(amount + "x ").withAppendix(getNameOrCustomNameOfItem(newItem)))
+                        .placeholder("material", Component.text(priceAmount + " ").withAppendix(type.getItemName()))
+                        .send(event.getPlayer());
+            }
+        }
+    }
+
+    // TODO: refactor this method!!!!! It's full of bugs
+    private void handleUpgrade(@NotNull OnTradeEvent event) {
+        var player = event.getPlayer().as(BedWarsPlayer.class);
+        var game = player.getGame();
+        var itemInfo = event.getItem();
+
+        // TODO: multi-price feature
+        // TODO: dynamic prices required for enchant upgrades
+        var price = event.getPrices().get(0);
+        ItemSpawnerTypeImpl type = game.getGameVariant().getItemSpawnerType(price.getCurrency());
+
+        var priceAmount = price.getAmount();
+
+        var upgrade = itemInfo.getFirstPropertyByName("upgrade").orElseThrow();
+        var itemName = upgrade.getPropertyData().node("shop-name").getString(Message.of(LangKeys.IN_GAME_SHOP_UPGRADE_TRANSLATE).asComponent(event.getPlayer()).toLegacy());
+        var entities = upgrade.getPropertyData().node("entities").childrenList();
+
+        boolean sendToAll = false;
+        boolean isUpgrade = true;
+        double maxLevel = 0.0;
+        double newLevel = 0.0;
+        var materialItem = type.getItem(priceAmount);
+
+        if (event.hasPlayerInInventory(materialItem)) {
+            final var upgradePurchasedEvent  = new StorePrePurchaseEventImpl(game, playerManager.getPlayer(event.getPlayer().getUuid()).orElseThrow(), materialItem, null, type, PurchaseType.UPGRADES, event);
+            EventManager.fire(upgradePurchasedEvent);
+            if (upgradePurchasedEvent.isCancelled()) return;
+
+            for (var entity : entities) {
+                var configuredType = entity.node("type").getString();
+                if (configuredType == null) {
+                    return;
+                }
+
+                if ("team".equalsIgnoreCase(configuredType)) {
+                    var team = game.getTeamOfPlayer(player);
+                    var upgradeName = entity.node("upgrade-name").getString();
+                    var levels = entity.node("levels").getDouble(1);
+                    if (upgradeName == null) {
+                        logger.warn("Upgrade configuration is invalid, team upgrade name is missing!");
+                        return;
+                    }
+
+                    var teamUpgrade = team.getUpgrade(upgradeName);
+                    if (teamUpgrade == null) {
+                        logger.warn("Upgrade configuration is invalid, team upgrade name {} is not registered!", upgradeName);
+                        return;
+                    }
+
+                    /* You shouldn't use it in entities */
+                    itemName = entity.node("shop-name").getString(itemName);
+                    sendToAll = entity.node("notify-team").getBoolean(sendToAll);
+
+                    var maximalLevel = teamUpgrade.getMaximalLevel();
+                    if (maximalLevel != null && maximalLevel < levels + teamUpgrade.getLevel()) {
+                        Message.of(LangKeys.IN_GAME_SPAWNER_REACHED_MAXIMUM_LEVEL) // TODO: this is not actually a spawner, but a generic upgrade
+                                .prefixOrDefault(game.getCustomPrefixComponent())
+                                .placeholder("item", itemName)
+                                .placeholder("material", price + " " + type.getItemName())
+                                .placeholder("max_level", teamUpgrade.getMaximalLevel())
+                                .send(player);
+                        return;
+                    }
+
+                    var level = teamUpgrade.getLevel();
+                    teamUpgrade.increaseLevel(levels);
+
+                    var changeEvent = new UpgradeLevelChangeEventImpl(game, team, upgradeName, teamUpgrade, level, teamUpgrade.getLevel());
+                    EventManager.fire(changeEvent);
+
+                    if (changeEvent.isCancelled()) {
+                        teamUpgrade.setLevel(level);
+                        // TODO: error message
+                        return;
+                    }
+
+                    event.sellStack(materialItem);
+                    newLevel = changeEvent.getNewLevel();
+
+                    var changedEvent = new UpgradeLevelChangedEventImpl(game, team, upgradeName, teamUpgrade, level);
+                    EventManager.fire(changedEvent);
+                }
+
+                // TODO: refactor the rest to the new API
+                var upgradeStorage = UpgradeRegistry.getUpgrade(configuredType);
+                if (upgradeStorage != null) {
+
+                    // variables
+                    var team = game.getTeamOfPlayer(player);
+                    double addLevels = entity.node("add-levels").getDouble(entity.node("levels").getDouble(0));
+                    /* You shouldn't use it in entities */
+                    itemName = entity.node("shop-name").getString(itemName);
+                    sendToAll = entity.node("notify-team").getBoolean(sendToAll);
+                    maxLevel = entity.node("max-level").getDouble();
+
+                    List<Upgrade> upgrades = new ArrayList<>();
+
+                    var spawnerNameNode = entity.node("spawner-name");
+                    var spawnerTypeNode = entity.node("spawner-type");
+                    var teamUpgradeNode = entity.node("team-upgrade");
+                    var customNameNode = entity.node("customName");
+
+                    if (!spawnerNameNode.empty()) {
+                        String customName = spawnerNameNode.getString();
+                        upgrades = upgradeStorage.findItemSpawnerUpgrades(game, customName);
+                    } else if (!spawnerTypeNode.empty()) {
+                        List<ItemSpawnerType> types = new ArrayList<>();
+                        if (spawnerTypeNode.isList()) {
+                            for (var child : spawnerTypeNode.childrenList()) {
+                                String mapSpawnerType = child.getString();
+                                ItemSpawnerType spawnerType = game.getGameVariant().getItemSpawnerType(mapSpawnerType);
+                                types.add(spawnerType);
+
+                                upgrades.addAll(upgradeStorage.findItemSpawnerUpgrades(game, team, spawnerType));
+                            }
+                        } else {
+                            String mapSpawnerType = spawnerTypeNode.getString();
+                            ItemSpawnerType spawnerType = game.getGameVariant().getItemSpawnerType(mapSpawnerType);
+                            types.add(spawnerType);
+
+                            upgrades = upgradeStorage.findItemSpawnerUpgrades(game, team, spawnerType);
+                        }
+
+                        if (upgrades.isEmpty() && entity.node("auto-discover-spawners-if-not-linked").getBoolean()) {
+                            for (var spawnerType : types) {
+                                double closestDistance = Double.MAX_VALUE;
+                                ItemSpawner closestSpawner = null;
+                                for (var spawner : game.getItemSpawners()) {
+                                    if (spawner.getItemSpawnerType().toSpawnerType(game) == spawnerType) {
+                                        double distance = team.getRandomSpawn().getDistanceSquared(spawner.getLocation());
+                                        if (distance < closestDistance) {
+                                            closestDistance = distance;
+                                            closestSpawner = spawner;
+                                        }
+
+                                    }
+                                }
+                                if (closestSpawner != null) {
+                                    upgrades.add(closestSpawner);
+                                }
+                            }
+                        }
+                    } else if (!teamUpgradeNode.empty()) {
+                        boolean upgradeAllSpawnersInTeam = teamUpgradeNode.getBoolean();
+
+                        if (upgradeAllSpawnersInTeam) {
+                            upgrades = upgradeStorage.findItemSpawnerUpgrades(game, team);
+                        }
+
+                    } else if (!customNameNode.empty()) { // Old configuration
+                        String customName = customNameNode.getString();
+                        upgrades = upgradeStorage.findItemSpawnerUpgrades(game, customName);
+                    } else {
+                        isUpgrade = false;
+                        logger.warn("Spawner upgrade configuration is invalid.");
+                    }
+
+                    if (isUpgrade) {
+                        for (var up : upgrades) {
+                            if (up.getLevel() + addLevels > maxLevel && maxLevel > 0) {
+                                Message.of(LangKeys.IN_GAME_SPAWNER_REACHED_MAXIMUM_LEVEL)
+                                        .prefixOrDefault(game.getCustomPrefixComponent())
+                                        .placeholder("item", itemName)
+                                        .placeholder("material", price + " " + type.getItemName())
+                                        .placeholder("max_level", maxLevel)
+                                        .send(player);
+                                return;
+                            }
+                        }
+
+                        event.sellStack(materialItem);
+                        var bedwarsUpgradeBoughtEvent = new UpgradeBoughtEventImpl(game, playerManager.getPlayer(player.getUuid()).orElseThrow(), upgrades, addLevels, upgradeStorage);
+                        EventManager.fire(bedwarsUpgradeBoughtEvent);
+
+                        if (bedwarsUpgradeBoughtEvent.isCancelled()) {
+                            continue;
+                        }
+
+                        if (upgrades.isEmpty()) {
+                            continue;
+                        }
+
+                        for (var anUpgrade : upgrades) {
+                            newLevel = anUpgrade.getLevel() + addLevels;
+                            var improvedEvent = new UpgradeImprovedEventImpl(game, anUpgrade, upgradeStorage, anUpgrade.getLevel(), newLevel);
+                            improvedEvent.setNewLevel(anUpgrade.getLevel() + addLevels);
+                            EventManager.fire(improvedEvent);
+                        }
+                    }
+                }
+
+                if (sendToAll) {
+                    for (var player1 : game.getPlayerTeam(player).getPlayers()) {
+                        if (!mainConfig.node("removeUpgradeMessages").getBoolean()) {
+                            Message.of(LangKeys.IN_GAME_SHOP_UPGRADE_SUCCESS)
+                                    .prefixOrDefault(game.getCustomPrefixComponent())
+                                    .placeholder("name", player.getDisplayName())
+                                    .placeholder("spawner", itemName)
+                                    .placeholder("level", newLevel)
+                                    .send(player1);
+                        }
+                        player.playSound(SoundStart.sound(
+                                ResourceLocation.of(mainConfig.node("sounds", "upgrade_buy", "sound").getString("entity.experience_orb.pickup")),
+                                SoundSource.PLAYER,
+                                (float) MainConfig.getInstance().node("sounds", "upgrade_buy", "volume").getDouble(),
+                                (float) MainConfig.getInstance().node("sounds", "upgrade_buy", "pitch").getDouble()
+                        ));
+                    }
+                } else {
+                    if (!mainConfig.node("removeUpgradeMessages").getBoolean()) {
+                        Message.of(LangKeys.IN_GAME_SHOP_UPGRADE_SUCCESS)
+                                .prefixOrDefault(game.getCustomPrefixComponent())
+                                .placeholder("name", player.getDisplayName())
+                                .placeholder("spawner", itemName)
+                                .placeholder("level", newLevel)
+                                .send(event.getPlayer());
+                    }
+                    player.playSound(SoundStart.sound(
+                            ResourceLocation.of(mainConfig.node("sounds", "upgrade_buy", "sound").getString("entity.experience_orb.pickup")),
+                            SoundSource.PLAYER,
+                            (float) MainConfig.getInstance().node("sounds", "upgrade_buy", "volume").getDouble(),
+                            (float) MainConfig.getInstance().node("sounds", "upgrade_buy", "pitch").getDouble()
+                    ));
+                }
+            }
+            EventManager.fire(new StorePostPurchaseEventImpl(game, playerManager.getPlayer(event.getPlayer().getUuid()).orElseThrow(), PurchaseType.UPGRADES, event));
+        } else {
+            final var purchaseFailedEvent = new PurchaseFailedEventImpl(game, playerManager.getPlayer(event.getPlayer().getUuid()).orElseThrow(), PurchaseType.UPGRADES, event);
+            EventManager.fire(purchaseFailedEvent);
+            if (purchaseFailedEvent.isCancelled()) return;
+
+            if (!mainConfig.node("removePurchaseFailedMessages").getBoolean()) {
+                Message.of(LangKeys.IN_GAME_SHOP_BUY_FAILED)
+                        .prefixOrDefault(game.getCustomPrefixComponent())
+                        .placeholder("item", itemName)
+                        .placeholder("material", Component.text(priceAmount + " ").withAppendix(type.getItemName()))
+                        .send(event.getPlayer());
+            }
+        }
+    }
+
+    @Override
+    public void openCustomStore(@NotNull BWPlayer player, @Nullable String fileName) {
+        if (!(player instanceof BedWarsPlayer)) {
+            throw new IllegalArgumentException("This BWPlayer is not constructed by the plugin!");
+        }
+
+        if (fileName == null) {
+            show((BedWarsPlayer) player, null);
+        } else {
+            show((BedWarsPlayer) player, new DummyStore(fileName, null));
+        }
+    }
+
+    @Override
+    public OpenShopEvent.@Nullable Result tryOpenStore(@NotNull BWPlayer player, OpenShopEvent.@NotNull StoreLike gameStore) {
+        if (!(player instanceof BedWarsPlayer)) {
+            throw new IllegalArgumentException("This BWPlayer is not constructed by the plugin!");
+        }
+
+        var game = ((BedWarsPlayer) player).getGame();
+
+        if (game == null) {
+            return null;
+        }
+
+        var openShopEvent = new OpenShopEventImpl(game, null, (BedWarsPlayer) player, gameStore);
+
+        if (
+            game.getConfigurationContainer().getOrDefault(GameConfigurationContainer.DISABLE_OPENING_STORES_OF_OTHER_TEAMS, false)
+            && gameStore.getTeam() != null
+            && gameStore.getTeam() != game.getPlayerTeam((BedWarsPlayer) player)
+        ) {
+            openShopEvent.setResult(OpenShopEvent.Result.DISALLOW_WRONG_TEAM);
+        }
+
+        EventManager.fire(openShopEvent);
+
+        if (openShopEvent.getResult() != OpenShopEvent.Result.ALLOW) {
+            return openShopEvent.getResult();
+        }
+
+        show((BedWarsPlayer) player, gameStore);
+        return OpenShopEvent.Result.ALLOW;
+    }
+
+    @Override
+    public OpenShopEvent.@Nullable Result tryOpenCustomStore(@NotNull BWPlayer player, @Nullable String fileName) {
+        return tryOpenStore(player, new DummyStore(fileName, null));
+    }
+
+    @Data
+    public static class DummyStore implements OpenShopEvent.StoreLike {
+        private final @Nullable String shopFile;
+        private final @Nullable TeamImpl team;
+    }
+}
