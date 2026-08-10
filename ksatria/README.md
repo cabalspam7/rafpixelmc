@@ -85,3 +85,43 @@ client will fetch our fake `/srvip/` (returns this host) then connect to our pro
 ## Disclaimer
 
 For research / educational use. Ksatria Online is a third-party game; respect its terms.
+
+---
+
+## Opcode `3` (char list / world join) — reversed layout (`eq.b`)
+
+Handler `eq.b` reads (server -> client), in order:
+
+```
+short   s2            // char/account id
+UTF     name          // lowercased
+int     n2,n3,n4,n5   // stats (hp-related)
+byte    s3,by2,by3,s4 // class/level/etc
+byte    s3b           // equipment count
+cz[]    s3b items: (byte a, int b)        // a=slot, b=value  (ver 3.0.9 uses readInt)
+short   cn.f.by, cn.f.bz
+short   bq.t, bq.u
+short[] bq.v[0][bq.f], bq.v[1][bq.f]        // bq.f = array length
+byte[]  bq.I[bq.f], bq.J[bq.f]
+byte    cv, short cA, byte by4 (=bq.x)
+short   s6; if s6>=0: int, int, UTF, byte  // some ref
+UTF     cn.S; long cn.T
+byte    by5; short[] sArray[by5]
+byte    ft.K
+try short cn.f.aM
+try byte  cn.f.dU
+try short cn.f.aN..aV  (several, each try/catch -> -1 on fail)
+```
+
+> Implementer note: `bq.f` (array lengths) is set elsewhere; without a live capture the
+> exact counts are unknown, so a blind reimplementation is fragile. The **proxy** is the
+> reliable path: any opcode-3 sent by the real server through `proxy.py` is auto-saved to
+> `/root/opcode3_capture.bin` for byte-exact replication.
+
+## Capture status
+
+- Proxy auto-saves opcode `3` raw bytes to `/root/opcode3_capture.bin` when seen.
+- Direct capture from `hso.vbproject.org:19129` failed: the live server drops the
+  connection immediately after the handshake (no `-100` welcome, no login response)
+  for unauthenticated/anonymous connections. A valid in-game account + real client is
+  required to obtain a live opcode-3 sample.
